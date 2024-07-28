@@ -1,0 +1,77 @@
+<html>
+
+  <head>
+       <meta content="width=device-width, initial-scale=1" name="viewport" />
+       <meta charset="UTF-8">
+  </head>
+
+  <body>
+    <div id="container" >
+
+<!--      
+Browser base64 Session Description<br />
+<textarea id="localSessionDescription" readonly="true"></textarea> <br />
+
+Golang base64 Session Description<br />
+<textarea id="remoteSessionDescription"></textarea> <br/>
+<button onclick="window.startSession()"> Start Session </button><br />
+
+<br />
+
+Video<br />
+-->
+
+<video id="video1" width="160" height="120" autoplay muted></video> <br />
+
+<!--
+Logs<br />
+<div id="logs"></div>
+
+    </div>
+-->
+        <script>
+    /*var input = document.getElementById("input");
+      var output = document.getElementById("output");*/
+
+      var socket = new WebSocket("ws://192.168.113.102:8080/echo");
+
+      socket.onopen = function () {
+          console.log("Status: Connected\n");
+    };
+
+      socket.onmessage = function (e) {
+//	  output.innerHTML += "Server: " + atob(e.data) + "\n";
+	  pc.setRemoteDescription(JSON.parse(atob(e.data)));
+
+   };
+/*
+    function send(vegas) {
+        socket.send(vegas);
+  //      input.value = "";
+    }
+*/
+    const pc = new RTCPeerConnection();
+
+const log = msg => {
+    console.log(msg);
+};
+
+navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+  .then(stream => {
+      document.getElementById('video1').srcObject = stream;
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+      pc.createOffer().then(d => pc.setLocalDescription(d)).catch(log);
+  }).catch(log);
+
+pc.oniceconnectionstatechange = e => console.log(pc.iceConnectionState);
+pc.onicecandidate = event => {
+  if (event.candidate === null) {
+      socket.send(btoa(JSON.stringify(pc.localDescription)));
+  }
+};
+
+  </script>
+
+  </body>
+</html>
