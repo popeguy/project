@@ -1,0 +1,1 @@
+This takes the PION/webrtc example for saving a video stream from the browser to WEBM (found elsewhere on github) and replaces the ICE signalling in favor of websockets to exchange the SDL data.  It also adds a webserver so everything is together.  Just run and go. 
