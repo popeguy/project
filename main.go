@@ -88,7 +88,7 @@ func main() {
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
-	http.ListenAndServeTLS(":8080", "go-server.crt", "go-server.key", nil)
+	http.ListenAndServeTLS(":8080", ".keys/go-server.crt", ".keys/go-server.key", nil)
 	//closed := make(chan os.Signal, 1)
 	//signal.Notify(closed, os.Interrupt)
 	//<-closed
