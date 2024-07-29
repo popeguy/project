@@ -3,6 +3,7 @@
   <head>
        <meta content="width=device-width, initial-scale=1" name="viewport" />
        <meta charset="UTF-8">
+       <link rel="icon" href="data:,">
   </head>
 
   <body>
@@ -33,7 +34,7 @@ Logs<br />
     /*var input = document.getElementById("input");
       var output = document.getElementById("output");*/
 
-      var socket = new WebSocket("ws://192.168.113.102:8080/echo");
+      var socket = new WebSocket("wss://192.168.113.102:8080/echo");
 
       socket.onopen = function () {
           console.log("Status: Connected\n");
