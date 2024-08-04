@@ -8,15 +8,24 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	encrypt "main/encrypt"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/at-wat/ebml-go/webm"
 	"github.com/gorilla/websocket"
@@ -27,18 +36,78 @@ import (
 	"github.com/pion/webrtc/v3/pkg/media/samplebuilder"
 )
 
+var SECRET_KEY = []byte("gosecretkey")
+
+type User struct {
+	Email    string `json:"email" bson:"email"`
+	Password string `json:"password" bson:"password"`
+}
+
+var client *mongo.Client
+
+func userSignup(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+	var user User
+	json.NewDecoder(request.Body).Decode(&user)
+	user.Password = encrypt.GetHash([]byte(user.Password))
+	collection := client.Database("GODB").Collection("user")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	result, _ := collection.InsertOne(ctx, user)
+	json.NewEncoder(response).Encode(result)
+}
+
+func userLogin(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+	var user User
+	var dbUser User
+	json.NewDecoder(request.Body).Decode(&user)
+	collection := client.Database("GODB").Collection("user")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	err := collection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&dbUser)
+
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		response.Write([]byte(`{"message":"` + err.Error() + `"}`))
+		return
+	}
+	userPass := []byte(user.Password)
+	dbPass := []byte(dbUser.Password)
+
+	passErr := bcrypt.CompareHashAndPassword(dbPass, userPass)
+
+	if passErr != nil {
+		log.Println(passErr)
+		response.Write([]byte(`{"response":"Wrong Password!"}`))
+		return
+	}
+	jwtToken, err := encrypt.GenerateJWT(user.Email)
+	if err != nil {
+		response.WriteHeader(http.StatusInternalServerError)
+		response.Write([]byte(`{"message":"` + err.Error() + `"}`))
+		return
+	}
+	response.Write([]byte(`{"token":"` + jwtToken + `"}`))
+
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 }
 
 func main() {
+	log.Println("Starting the application")
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+
+	client, _ = mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
 
 	saver := newWebmSaver()
-
+	router := mux.NewRouter()
 	peerConnection := createWebRTCConn(saver)
+	router.HandleFunc("/login", userLogin).Methods("POST")
+	router.HandleFunc("/signup", userSignup).Methods("POST")
 
-	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 		conn, _ := upgrader.Upgrade(w, r, nil) // error ignored for sake of simplicity
 
 		for {
@@ -84,11 +153,11 @@ func main() {
 		}
 	})
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, r.URL.Path[1:])
 	})
 
-	http.ListenAndServeTLS(":8080", ".keys/go-server.crt", ".keys/go-server.key", nil)
+	log.Fatal(http.ListenAndServeTLS(":8080", ".keys/go-server.crt", ".keys/go-server.key", router))
 	//closed := make(chan os.Signal, 1)
 	//signal.Notify(closed, os.Interrupt)
 	//<-closed
